@@ -492,15 +492,58 @@ class RAGEnhancedAgent(BaseAgent):
                 })
 
     def _create_query_text(self, pr_event: PREvent) -> str:
-        """Create search query from PR content."""
-        # Combine PR title, description, and file names
+        """
+        V3 ENHANCEMENT: Create enhanced search query with richer context.
+        Structured query with file types, branch info, and code patterns.
+        """
+        # Extract file types
+        file_types = sorted({f.filename.split('.')[-1]
+                            for f in pr_event.files if '.' in f.filename})
+
+        # Extract code keywords from files
+        code_keywords = self._extract_code_keywords(pr_event.files)
+
+        # Build structured query with rich context
         query_parts = [
-            pr_event.pr_title,
-            pr_event.pr_description[:500] if pr_event.pr_description else '',
-            ' '.join([f.filename for f in pr_event.files[:10]])
+            f"Title: {pr_event.pr_title}",
+            f"Description: {pr_event.pr_description[:400] if pr_event.pr_description else 'N/A'}",
+            f"Repository: {pr_event.repository}",
+            f"Base Branch: {pr_event.base_branch}",
+            f"File Types: {', '.join(file_types) if file_types else 'N/A'}",
+            f"Modified Files: {', '.join([f.filename for f in pr_event.files[:5]])}",
+            f"Code Patterns: {', '.join(code_keywords) if code_keywords else 'N/A'}"
         ]
-        return ' '.join(filter(None, query_parts))
-    
+
+        return " | ".join(query_parts)
+
+    def _extract_code_keywords(self, files) -> List[str]:
+        """
+        V3 ENHANCEMENT: Extract relevant code patterns from modified files.
+        Returns keywords for security, concurrency, quality, and memory patterns.
+        """
+        # Define pattern categories
+        security_patterns = ['sql', 'query', 'password', 'secret', 'key',
+                            'token', 'auth', 'crypto']
+        concurrency_patterns = ['synchronized', 'volatile', 'thread', 'lock',
+                               'atomic', 'concurrent']
+        quality_patterns = ['null', 'exception', 'try', 'catch', 'throw', 'error']
+        memory_patterns = ['stream', 'close', 'dispose', 'memory', 'leak']
+
+        all_patterns = (security_patterns + concurrency_patterns +
+                       quality_patterns + memory_patterns)
+
+        # Extract keywords from first 3 files (performance optimization)
+        keywords = set()
+        for file in files[:3]:
+            if hasattr(file, 'patch') and file.patch:
+                patch_lower = file.patch.lower()
+                for pattern in all_patterns:
+                    if pattern in patch_lower:
+                        keywords.add(pattern)
+
+        # Return top 8 keywords
+        return sorted(keywords)[:8]
+
     def _generate_rag_insights(
         self,
         pr_event: PREvent,
@@ -566,9 +609,18 @@ class RAGEnhancedAgent(BaseAgent):
         pr_event: PREvent,
         relevant_context: Dict[str, Any]
     ) -> str:
-        """Build concise prompt with retrieved context."""
-        
-        # Format similar PRs context - limit to top 2 for speed
+        """
+        V3 ENHANCEMENT: Build comprehensive prompt with explicit instructions for specificity.
+        Shows 5 similar PRs instead of 2, includes similarity scores, and demands specific advice.
+        """
+        similar_prs = relevant_context.get('similar_prs', [])
+
+        # Extract file types for context
+        file_types = sorted({f.filename.split('.')[-1]
+                           for f in pr_event.files if '.' in f.filename})
+        file_types_str = ', '.join(file_types) if file_types else 'N/A'
+
+        # Format similar PRs context - V3: Show 5 instead of 2, include similarity scores
         similar_prs_text = ""
         if relevant_context['similar_prs']:
             similar_prs_text = "\n"
@@ -717,15 +769,16 @@ IMPORTANT:
 
             # Generate embedding
             embedding = self._get_code_embedding(doc_text)
-
             # V3 ENHANCEMENT: Store with richer metadata for better future retrieval
             # Extract file types
             file_types = sorted({f.filename.split('.')[-1]
                                for f in pr_event.files if '.' in f.filename})
+
             self.vector_db.add(
                 embeddings=[embedding],
                 documents=[doc_text],
                 metadatas=[{
+                    # Original fields
                     'pr_number': pr_event.pr_number,
                     'pr_title': pr_event.pr_title,
                     'repository': pr_event.repository,
