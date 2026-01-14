@@ -22,10 +22,10 @@ NC='\033[0m' # No Color
 
 # Default values
 API_URL="http://127.0.0.1:5000/api/analyze"
-REPOSITORY="tarentomaheshvakkund/testdata-hackathon"  # Default repository from .env
-START_PR=45
-END_PR=100
-DELAY_SECONDS=2  # Delay between requests to avoid overwhelming the system
+REPOSITORY="tarentomaheshvakkund/testdata-java-hackathon"  # Default repository from .env
+START_PR=554
+END_PR=558
+DELAY_SECONDS=10  # Delay between requests to avoid overwhelming the system
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do

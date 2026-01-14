@@ -1,11 +1,11 @@
 """Database models for PR analysis persistence."""
-from datetime import datetime
+from datetime import datetime, timezone
 import uuid
 from sqlalchemy import (
     Column, Integer, String, Text, DateTime, Float, 
-    Boolean, ForeignKey, JSON, Index
+    Boolean, ForeignKey, JSON, Index, Interval
 )
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import UUID, JSONB, ARRAY
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 
@@ -90,6 +90,7 @@ class PRAnalysis(Base):
     issues = relationship("PRIssue", back_populates="analysis", cascade=CASCADE_ALL_DELETE_ORPHAN)
     metrics = relationship("PRMetrics", back_populates="analysis", uselist=False, cascade=CASCADE_ALL_DELETE_ORPHAN)
     comments = relationship("PRComment", back_populates="analysis", cascade=CASCADE_ALL_DELETE_ORPHAN)
+    feedback = relationship("RAGFeedback", back_populates="analysis", cascade=CASCADE_ALL_DELETE_ORPHAN)
     
     # Composite indexes and constraints for common queries
     __table_args__ = (
@@ -573,3 +574,43 @@ class PRCommentStatistics(Base):
     
     def __repr__(self):
         return f"<PRCommentStatistics(date={self.date}, period={self.period_type}, total={self.total_comments_posted})>"
+
+
+class RAGFeedback(Base):
+    """Table to store user feedback on RAG recommendations."""
+    __tablename__ = 'rag_feedback'
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    pr_analysis_id = Column(Integer, ForeignKey(PR_ANALYSIS_ID_FK, ondelete='CASCADE'), nullable=False, index=True)
+    
+    recommendation_id = Column(Text)
+    rating = Column(Integer)  # 1-5
+    is_helpful = Column(Boolean)
+    user_comment = Column(Text)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    
+    # Relationships
+    analysis = relationship("PRAnalysis", back_populates="feedback")
+    
+    def __repr__(self):
+        return f"<RAGFeedback(id={self.id}, pr={self.pr_analysis_id}, rating={self.rating})>"
+
+
+class RAGPatternLibrary(Base):
+    """Table to store recurring code patterns identified by RAG."""
+    __tablename__ = 'rag_pattern_library'
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    pattern_name = Column(String(255), unique=True, nullable=False, index=True)
+    category = Column(String(100), index=True)
+    description = Column(Text)
+    frequency = Column(Integer, default=1)
+    success_rate = Column(Float, default=0.0)
+    example_prs = Column(JSONB)  # Store array of PR info
+    avg_resolution_time = Column(Interval)
+    recommended_solutions = Column(ARRAY(Text))
+    last_seen = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    
+    def __repr__(self):
+        return f"<RAGPatternLibrary(id={self.id}, name={self.pattern_name}, frequency={self.frequency})>"

@@ -113,35 +113,25 @@ class TestPRAnalysisWorkflow:
             is_draft=False
         )
         
-        # Mock the MainAgent to return a predictable result
-        mock_result = Mock()
-        mock_result.agent_name = "Main Orchestrator Agent"
-        mock_result.success = True
-        mock_result.issues = []
-        mock_result.metrics = {'security_score': 85, 'quality_score': 90}
-        mock_result.execution_time = 2.5
-        mock_result.error = None
-        mock_result.metadata = {}
-        
-        with patch('agents.dispatcher.MainAgent') as MockMainAgent:
-            mock_main_agent = Mock()
-            mock_main_agent.analyze.return_value = mock_result
-            mock_main_agent.get_agent_breakdown.return_value = {}
-            MockMainAgent.return_value = mock_main_agent
+        # Use real AgentDispatcher with mocked sub-agents or subprocesses
+        # For this test, we want to verify the dispatcher's coordination logic
+        with patch('agents.main_agent.MultiLanguageStaticAnalysisAgent') as MockStaticAgent:
+            mock_static_instance = Mock()
+            mock_static_instance.name = "Multi-Language Static Analysis Agent"
+            mock_static_instance.analyze.return_value = MagicMock(issues=[], metrics={}, success=True)
+            MockStaticAgent.return_value = mock_static_instance
             
-            with patch('agents.dispatcher.config') as mock_config:
-                mock_config.get.return_value = {}
-                
-                from agents.dispatcher import AgentDispatcher
-                dispatcher = AgentDispatcher(db_service=None)
-                
-                # Execute the analysis
-                result = dispatcher.dispatch(pr_event)
-                
-                # Verify the workflow completed successfully
-                assert result.success is True
-                assert result.agent_name == "Main Orchestrator Agent"
-                mock_main_agent.analyze.assert_called_once_with(pr_event)
+            from agents.dispatcher import AgentDispatcher
+            dispatcher = AgentDispatcher(db_service=None)
+            
+            # Execute the analysis
+            result = dispatcher.dispatch(pr_event)
+            
+            # Verify the workflow completed successfully
+            assert result.success is True
+            assert "Main Orchestrator Agent" in result.agent_name
+            # Verify the sub-agent was called
+            mock_static_instance.analyze.assert_called_once()
     
     @pytest.mark.integration
     def test_analysis_with_issues_detected(self):
@@ -197,30 +187,30 @@ class TestPRAnalysisWorkflow:
         mock_result.error = None
         mock_result.metadata = {}
         
-        with patch('agents.dispatcher.MainAgent') as MockMainAgent:
-            mock_main_agent = Mock()
-            mock_main_agent.analyze.return_value = mock_result
-            mock_main_agent.get_agent_breakdown.return_value = {
-                'security': {
-                    'issues_count': 1,
-                    'issues': [mock_issue],
-                    'metadata': {}
-                }
-            }
-            MockMainAgent.return_value = mock_main_agent
+        # Use real AgentDispatcher but mock the specific agent that should find the issue
+        with patch('agents.main_agent.MultiLanguageSecurityAgent') as MockSecurityAgent:
+            mock_sec_instance = Mock()
+            mock_sec_instance.name = "Multi-Language Security Agent"
+            mock_sec_instance.analyze.return_value = MagicMock(
+                issues=[mock_issue], 
+                metrics={'security_score': 20}, 
+                success=True,
+                agent_name="Multi-Language Security Agent"
+            )
+            MockSecurityAgent.return_value = mock_sec_instance
             
-            with patch('agents.dispatcher.config') as mock_config:
-                mock_config.get.return_value = {}
-                
-                from agents.dispatcher import AgentDispatcher
-                dispatcher = AgentDispatcher(db_service=None)
-                
-                result = dispatcher.dispatch(pr_event)
-                
-                # Verify issues were captured
-                assert result.success is True
-                assert len(result.issues) == 1
-                assert result.metadata['agent_breakdown']['security']['issues_count'] == 1
+            from agents.dispatcher import AgentDispatcher
+            dispatcher = AgentDispatcher(db_service=None)
+            
+            result = dispatcher.dispatch(pr_event)
+            
+            # Verify issues were captured through the actual dispatch/orchestration flow
+            assert result.success is True
+            assert len(result.issues) >= 1
+            # Check if our mocked security issue is present in the breakdown
+            breakdown = result.metadata.get('agent_breakdown', {})
+            assert "Multi-Language Security Agent" in breakdown
+            assert breakdown["Multi-Language Security Agent"]['issues_count'] == 1
 
 
 # ============================================================================
@@ -249,16 +239,16 @@ class TestAPIIntegration:
                 }
                 mock_github.get_pr_files.return_value = []
                 
-                # Mock dispatcher result
-                mock_result = Mock()
-                mock_result.agent_name = "Main Orchestrator Agent"
-                mock_result.success = True
-                mock_result.issues = []
-                mock_result.metrics = {}
-                mock_result.execution_time = 1.0
-                mock_result.error = None
+                # Mock dispatcher result properly
+                from models.analysis_result import AgentResult
+                mock_result = AgentResult(
+                    agent_name="Main Orchestrator Agent",
+                    success=True,
+                    issues=[],
+                    metrics={'quality_score': 100},
+                    execution_time=1.0
+                )
                 mock_result.metadata = {'agent_breakdown': {}}
-                mock_result.critical_count = 0
                 mock_dispatcher.dispatch.return_value = mock_result
                 
                 response = client.post(
@@ -269,6 +259,7 @@ class TestAPIIntegration:
                     }),
                     content_type='application/json'
                 )
+
                 
                 # Verify response structure
                 assert response.status_code == 200
@@ -402,43 +393,30 @@ class TestEndToEndScenarios:
             is_draft=False
         )
         
-        # Mock the complete workflow
-        mock_result = Mock()
-        mock_result.agent_name = "Main Orchestrator Agent"
-        mock_result.success = True
-        mock_result.issues = []
-        mock_result.metrics = {
-            'quality_score': 92,
-            'security_score': 95,
-            'maintainability_score': 88
-        }
-        mock_result.execution_time = 3.2
-        mock_result.error = None
-        mock_result.metadata = {'files_analyzed': 2}
-        
-        with patch('agents.dispatcher.MainAgent') as MockMainAgent:
-            mock_main_agent = Mock()
-            mock_main_agent.analyze.return_value = mock_result
-            mock_main_agent.get_agent_breakdown.return_value = {
-                'static_analysis': {'issues_count': 0, 'issues': [], 'metadata': {}},
-                'security': {'issues_count': 0, 'issues': [], 'metadata': {}},
-                'code_quality': {'issues_count': 0, 'issues': [], 'metadata': {}}
-            }
-            MockMainAgent.return_value = mock_main_agent
+        # Use real AgentDispatcher but mock sub-agents
+        with patch('agents.main_agent.MultiLanguageStaticAnalysisAgent') as MockStaticAgent:
+            mock_static_instance = Mock()
+            mock_static_instance.name = "Multi-Language Static Analysis Agent"
+            mock_static_instance.analyze.return_value = MagicMock(
+                issues=[], 
+                metrics={'quality_score': 92}, 
+                success=True,
+                agent_name="Multi-Language Static Analysis Agent"
+            )
+            MockStaticAgent.return_value = mock_static_instance
             
-            with patch('agents.dispatcher.config') as mock_config:
-                mock_config.get.return_value = {}
-                
-                from agents.dispatcher import AgentDispatcher
-                dispatcher = AgentDispatcher(db_service=None)
-                
-                result = dispatcher.dispatch(pr_event)
-                
-                # Verify successful analysis
-                assert result.success is True
-                assert result.metrics['quality_score'] == 92
-                assert 'agent_breakdown' in result.metadata
-                assert len(result.metadata['agent_breakdown']) == 3
+            from agents.dispatcher import AgentDispatcher
+            dispatcher = AgentDispatcher(db_service=None)
+            
+            result = dispatcher.dispatch(pr_event)
+            
+            # Verify successful analysis
+            assert result.success is True
+            breakdown = result.metadata.get('agent_breakdown', {})
+            assert "Multi-Language Static Analysis Agent" in breakdown
+            # Note: AgentDispatcher merges metrics into metadata in the breakdown
+            assert breakdown["Multi-Language Static Analysis Agent"]['metadata']['quality_score'] == 92
+
     
     @pytest.mark.integration
     def test_pr_with_critical_issues_scenario(self):
@@ -484,37 +462,29 @@ class TestEndToEndScenarios:
         mock_issue.suggestion = "Use parameterized queries"
         mock_issue.metadata = {}
         
-        mock_result = Mock()
-        mock_result.agent_name = "Main Orchestrator Agent"
-        mock_result.success = True
-        mock_result.issues = [mock_issue]
-        mock_result.metrics = {'security_score': 10}
-        mock_result.execution_time = 1.0
-        mock_result.error = None
-        mock_result.metadata = {'critical_count': 1}
-        
-        with patch('agents.dispatcher.MainAgent') as MockMainAgent:
-            mock_main_agent = Mock()
-            mock_main_agent.analyze.return_value = mock_result
-            mock_main_agent.get_agent_breakdown.return_value = {
-                'security': {
-                    'issues_count': 1,
-                    'issues': [mock_issue],
-                    'metadata': {'critical_issues': 1}
-                }
-            }
-            MockMainAgent.return_value = mock_main_agent
+        # Use real AgentDispatcher but mock sub-agents
+        with patch('agents.main_agent.MultiLanguageSecurityAgent') as MockSecurityAgent:
+            mock_sec_instance = Mock()
+            mock_sec_instance.name = "Multi-Language Security Agent"
+            mock_sec_instance.analyze.return_value = MagicMock(
+                issues=[mock_issue], 
+                metrics={'security_score': 10}, 
+                success=True,
+                agent_name="Multi-Language Security Agent"
+            )
+            MockSecurityAgent.return_value = mock_sec_instance
             
-            with patch('agents.dispatcher.config') as mock_config:
-                mock_config.get.return_value = {}
-                
-                from agents.dispatcher import AgentDispatcher
-                dispatcher = AgentDispatcher(db_service=None)
-                
-                result = dispatcher.dispatch(pr_event)
-                
-                # Verify critical issue was detected
-                assert result.success is True
-                assert len(result.issues) == 1
-                assert result.metrics['security_score'] == 10
-                assert result.metadata['agent_breakdown']['security']['issues_count'] == 1
+            from agents.dispatcher import AgentDispatcher
+            dispatcher = AgentDispatcher(db_service=None)
+            
+            result = dispatcher.dispatch(pr_event)
+            
+            # Verify critical issue was detected
+            assert result.success is True
+            assert len(result.issues) >= 1
+            breakdown = result.metadata.get('agent_breakdown', {})
+            assert "Multi-Language Security Agent" in breakdown
+            assert breakdown["Multi-Language Security Agent"]['metadata']['security_score'] == 10
+            assert breakdown["Multi-Language Security Agent"]['issues_count'] == 1
+
+

@@ -1065,7 +1065,7 @@ def get_user_statistics(author_identifier: str):
             'last_pr_date': user_stats.last_pr_date.isoformat() if user_stats.last_pr_date else None
         }), 200
     except Exception as e:
-        logger.error("Failed to get user statistics", error=str(e), author=author_login)
+        logger.error("Failed to get user statistics", error=str(e), author=author_identifier)
         return jsonify({'error': 'Failed to retrieve statistics'}), 500
 
 

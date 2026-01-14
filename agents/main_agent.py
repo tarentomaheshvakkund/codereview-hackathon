@@ -174,6 +174,15 @@ class MainAgent(BaseAgent):
         # Store agent results in metadata for reporting
         self._agent_breakdown = agent_results
         
+        # Phase 1: Update RAG agents with full analysis results for "learning"
+        # Pass the full agent breakdown so RAG can access metrics (coverage, complexity, etc.)
+        for agent in rag_agents:
+            if hasattr(agent, '_update_pr_analysis_results'):
+                try:
+                    # UPDATED: Pass the full breakdown + issues for richer learning
+                    agent._update_pr_analysis_results(pr_event, all_issues, agent_results)
+                except Exception as e:
+                    self.logger.error(f"Failed to update RAG learning for {agent.name}: {e}")
         return all_issues
     
     def _run_single_agent(self, agent: BaseAgent, pr_event: PREvent) -> tuple:
