@@ -9,8 +9,8 @@ This module provides:
 """
 import uuid
 from functools import wraps
-from flask import request, jsonify, g
 from typing import Optional, Dict, Any
+from flask import request, jsonify, g
 from utils.logger import logger
 
 
@@ -22,27 +22,27 @@ class ErrorCode:
     """Standard error codes for the API."""
     # Authentication errors (1xxx)
     AUTH_REQUIRED = "AUTH_001"
-    AUTH_INVALID_TOKEN = "AUTH_002"
-    AUTH_EXPIRED_TOKEN = "AUTH_003"
+    AUTH_INVALID_TOKEN = "AUTH_002"  # nosec B105
+    AUTH_EXPIRED_TOKEN = "AUTH_003"  # nosec B105
     AUTH_INVALID_CREDENTIALS = "AUTH_004"
     AUTH_SERVICE_UNAVAILABLE = "AUTH_005"
-    
+
     # Validation errors (2xxx)
     VALIDATION_REQUIRED_FIELD = "VAL_001"
     VALIDATION_INVALID_FORMAT = "VAL_002"
     VALIDATION_INVALID_VALUE = "VAL_003"
-    
+
     # Resource errors (3xxx)
     RESOURCE_NOT_FOUND = "RES_001"
     RESOURCE_ALREADY_EXISTS = "RES_002"
     RESOURCE_CONFLICT = "RES_003"
-    
+
     # External service errors (4xxx)
     GITHUB_API_ERROR = "EXT_001"
     DATABASE_ERROR = "EXT_002"
     OPENAI_API_ERROR = "EXT_003"
     SLACK_API_ERROR = "EXT_004"
-    
+
     # Internal errors (5xxx)
     INTERNAL_ERROR = "INT_001"
     ANALYSIS_FAILED = "INT_002"
@@ -56,14 +56,14 @@ class ErrorCode:
 class APIError(Exception):
     """
     Base exception for API errors.
-    
+
     Attributes:
         message: Human-readable error message
         code: Error code from ErrorCode class
         status_code: HTTP status code
         details: Optional additional error details
     """
-    
+
     def __init__(
         self,
         message: str,
@@ -76,7 +76,7 @@ class APIError(Exception):
         self.code = code
         self.status_code = status_code
         self.details = details or {}
-    
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert the error to a dictionary for JSON response."""
         error_dict = {
@@ -91,7 +91,7 @@ class APIError(Exception):
 
 class ValidationError(APIError):
     """Raised when request validation fails."""
-    
+
     def __init__(self, message: str, field: Optional[str] = None):
         details = {'field': field} if field else None
         super().__init__(
@@ -104,7 +104,7 @@ class ValidationError(APIError):
 
 class AuthenticationError(APIError):
     """Raised when authentication fails."""
-    
+
     def __init__(self, message: str = "Authentication required"):
         super().__init__(
             message=message,
@@ -115,7 +115,7 @@ class AuthenticationError(APIError):
 
 class NotFoundError(APIError):
     """Raised when a resource is not found."""
-    
+
     def __init__(self, resource_type: str, identifier: Any):
         super().__init__(
             message=f"{resource_type} not found: {identifier}",
@@ -127,7 +127,7 @@ class NotFoundError(APIError):
 
 class ExternalServiceError(APIError):
     """Raised when an external service fails."""
-    
+
     def __init__(self, service: str, message: str, code: str = ErrorCode.INTERNAL_ERROR):
         super().__init__(
             message=f"{service} error: {message}",
@@ -149,7 +149,7 @@ def generate_request_id() -> str:
 def request_id_middleware(app):
     """
     Middleware to add request ID to all requests.
-    
+
     Usage:
         request_id_middleware(app)
     """
@@ -157,7 +157,7 @@ def request_id_middleware(app):
     def before_request():
         # Check if request ID is provided in header, otherwise generate one
         g.request_id = request.headers.get('X-Request-ID', generate_request_id())
-    
+
     @app.after_request
     def after_request(response):
         # Add request ID to response headers
@@ -177,13 +177,13 @@ def format_error_response(
 ) -> tuple:
     """
     Format a standardized error response.
-    
+
     Args:
         message: Human-readable error message
         code: Error code
         status_code: HTTP status code
         details: Optional additional details
-        
+
     Returns:
         Tuple of (response_dict, status_code)
     """
@@ -195,18 +195,18 @@ def format_error_response(
     }
     if details:
         response['details'] = details
-    
+
     return jsonify(response), status_code
 
 
 def register_error_handlers(app):
     """
     Register error handlers for the Flask app.
-    
+
     Usage:
         register_error_handlers(app)
     """
-    
+
     @app.errorhandler(APIError)
     def handle_api_error(error):
         """Handle custom API errors."""
@@ -217,34 +217,35 @@ def register_error_handlers(app):
             request_id=getattr(g, 'request_id', None)
         )
         return jsonify(error.to_dict()), error.status_code
-    
+
     @app.errorhandler(400)
     def handle_bad_request(error):
         """Handle 400 Bad Request errors."""
         return format_error_response(
+            # pylint: disable=no-member
             message=str(error.description) if hasattr(error, 'description') else "Bad request",
             code=ErrorCode.VALIDATION_INVALID_FORMAT,
             status_code=400
         )
-    
+
     @app.errorhandler(404)
-    def handle_not_found(error):
+    def handle_not_found(_error):
         """Handle 404 Not Found errors."""
         return format_error_response(
             message="Resource not found",
             code=ErrorCode.RESOURCE_NOT_FOUND,
             status_code=404
         )
-    
+
     @app.errorhandler(405)
-    def handle_method_not_allowed(error):
+    def handle_method_not_allowed(_error):
         """Handle 405 Method Not Allowed errors."""
         return format_error_response(
             message="Method not allowed",
             code=ErrorCode.VALIDATION_INVALID_FORMAT,
             status_code=405
         )
-    
+
     @app.errorhandler(500)
     def handle_internal_error(error):
         """Handle 500 Internal Server Error."""
@@ -267,11 +268,11 @@ def register_error_handlers(app):
 def check_service_health(service_name: str, check_func: callable) -> Dict[str, Any]:
     """
     Check the health of an external service.
-    
+
     Args:
         service_name: Name of the service
         check_func: Function that returns True if healthy
-        
+
     Returns:
         Dictionary with health status
     """
@@ -298,14 +299,14 @@ def check_service_health(service_name: str, check_func: callable) -> Dict[str, A
 def with_retry(max_attempts: int = 3, delay: float = 1.0, exceptions: tuple = (Exception,)):
     """
     Decorator to retry a function on failure.
-    
+
     Args:
         max_attempts: Maximum number of attempts
         delay: Delay between attempts in seconds
         exceptions: Tuple of exceptions to catch
     """
     import time
-    
+
     def decorator(func):
         @wraps(func)
         def wrapper(*args, **kwargs):

@@ -41,9 +41,11 @@ dmypy.json
 .pyre/
 .pytype/
 
-# IDE
+# IDE & Tools
 .vscode/
 .idea/
+.claude/
+.tools/
 *.swp
 *.swo
 *~
@@ -87,6 +89,11 @@ frontend/.vite/
 frontend/.env.local
 frontend/.env.*.local
 
-# OS specific
+# OS specific & Virtual Environments
+venv*/
 Thumbs.db
-.DS_Store
+*.csh
+*.fish
+*.ps1
+*.12
+*.cfg

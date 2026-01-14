@@ -8,7 +8,8 @@ from contextlib import contextmanager
 
 from models.database import (
     Base, PRAnalysis, PRIssue, PRMetrics, 
-    UserStatistics, BestPractice, UserAnalytics
+    UserStatistics, BestPractice, UserAnalytics,
+    RAGFeedback, RAGPatternLibrary
 )
 from services.rag_database_service import RAGDatabaseService
 from utils.logger import logger
@@ -1242,3 +1243,86 @@ class DatabaseService:
                 session.expunge(analytics)
             
             return analytics_list
+
+    def save_rag_feedback(self, pr_analysis_id: int, rating: int, is_helpful: bool, 
+                          recommendation_id: str = None, user_comment: str = None):
+        """Save user feedback for a RAG recommendation."""
+        with self.get_session() as session:
+            feedback = RAGFeedback(
+                pr_analysis_id=pr_analysis_id,
+                rating=rating,
+                is_helpful=is_helpful,
+                recommendation_id=recommendation_id,
+                user_comment=user_comment
+            )
+            session.add(feedback)
+            session.commit()
+            return feedback
+
+    def get_pr_feedback(self, pr_number: int, repository: str = None) -> List[Dict]:
+        """Get all feedback for a specific PR."""
+        with self.get_session() as session:
+            query = session.query(RAGFeedback).join(PRAnalysis)
+            query = query.filter(PRAnalysis.pr_number == pr_number)
+            if repository:
+                query = query.filter(PRAnalysis.repository == repository)
+            
+            feedback_list = query.all()
+            return [
+                {
+                    'rating': f.rating,
+                    'is_helpful': f.is_helpful,
+                    'comment': f.user_comment,
+                    'created_at': f.created_at.isoformat()
+                } for f in feedback_list
+            ]
+
+    def update_pattern_library(self, pattern_name: str, category: str, 
+                               pr_info: Dict, solution: str = None):
+        """Insert or update a pattern in the library."""
+        with self.get_session() as session:
+            pattern = session.query(RAGPatternLibrary).filter_by(pattern_name=pattern_name).first()
+            
+            if pattern:
+                pattern.frequency += 1
+                pattern.last_seen = datetime.now(timezone.utc)
+                # Update example PRs list (avoid duplicates)
+                if not pattern.example_prs:
+                    pattern.example_prs = []
+                if pr_info not in pattern.example_prs:
+                    pattern.example_prs.append(pr_info)
+                
+                # Add solution if provided and not already present
+                if solution:
+                    if not pattern.recommended_solutions:
+                        pattern.recommended_solutions = []
+                    if solution not in pattern.recommended_solutions:
+                        pattern.recommended_solutions.append(solution)
+            else:
+                pattern = RAGPatternLibrary(
+                    pattern_name=pattern_name,
+                    category=category,
+                    example_prs=[pr_info],
+                    recommended_solutions=[solution] if solution else []
+                )
+                session.add(pattern)
+            
+            session.commit()
+            return pattern
+
+    def get_common_patterns(self, category: str = None, limit: int = 10) -> List[Dict]:
+        """Get most frequent patterns from the library."""
+        with self.get_session() as session:
+            query = session.query(RAGPatternLibrary).order_by(desc(RAGPatternLibrary.frequency))
+            if category:
+                query = query.filter_by(category=category)
+            
+            patterns = query.limit(limit).all()
+            return [
+                {
+                    'name': p.pattern_name,
+                    'category': p.category,
+                    'frequency': p.frequency,
+                    'solutions': p.recommended_solutions
+                } for p in patterns
+            ]

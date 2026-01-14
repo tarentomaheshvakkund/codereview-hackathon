@@ -122,7 +122,7 @@ agents:
     ai_provider: "openai"  # Default provider: 'openai' or 'gemini'
     
     # OpenAI Models (when ai_provider = 'openai')
-    openai_model: "gpt-4o-mini"  # Options: gpt-4, gpt-4o, gpt-4o-mini, gpt-3.5-turbo
+    openai_model: "gpt-4o"  # High-performance model for deep code understanding
     
     # Gemini Models (when ai_provider = 'gemini')
     gemini_model: "gemini-1.5-flash"  # Options: gemini-1.5-flash, gemini-1.5-pro, gemini-pro
@@ -167,9 +167,9 @@ output:
     request_changes_threshold: "high"
     
   slack:
-    enabled: false
-    mention_on_critical: false
-    channel_notifications: false
+    enabled: true
+    mention_on_critical: true
+    channel_notifications: true
     
   dashboard:
     enabled: true

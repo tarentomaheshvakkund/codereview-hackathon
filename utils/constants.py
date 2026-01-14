@@ -150,9 +150,13 @@ RETRY_DELAY = float(os.getenv('RETRY_DELAY', '2.0'))
 # PATTERN MATCHING (REGEX)
 # ============================================================================
 # Security patterns
-PATTERN_HARDCODED_SECRET = r'(?:password|passwd|pwd|secret|api[_-]?key|token)\s*=\s*["\'][^"\']+["\']'
+PATTERN_HARDCODED_SECRET = (
+    r'(?:password|passwd|pwd|secret|api[_-]?key|token)\s*=\s*["\'][^"\']+["\']'
+)  # nosec B105
 PATTERN_SQL_INJECTION = r'(?:execute|executeQuery|createQuery)\s*\([^)]*\+[^)]*\)'
-PATTERN_COMMAND_INJECTION = r'(?:Runtime\.getRuntime\(\)\.exec|ProcessBuilder|os\.system|subprocess\.)'
+PATTERN_COMMAND_INJECTION = (
+    r'(?:Runtime\.getRuntime\(\)\.exec|ProcessBuilder|os\.system|subprocess\.)'
+)
 
 # Quality patterns
 PATTERN_TODO_COMMENT = r'(?://|#|/\*)\s*(?:TODO|FIXME|XXX|HACK)'
@@ -212,17 +216,17 @@ ENABLE_BEST_PRACTICES = os.getenv('ENABLE_BEST_PRACTICES', 'true').lower() == 't
 def validate_configuration():
     """Validate that all required configuration is present."""
     errors = []
-    
+
     if not GITHUB_TOKEN:
         errors.append("GITHUB_TOKEN is not set in environment variables")
-    
+
     if not DB_PASSWORD:
         errors.append("DB_PASSWORD is not set")
-    
+
     weight_sum = WEIGHT_SECURITY + WEIGHT_QUALITY + WEIGHT_COVERAGE + WEIGHT_COMPLEXITY
     if abs(weight_sum - 1.0) > 0.0001:  # Use epsilon comparison for floating point
         errors.append(f"Quality score weights must sum to 1.0, got {weight_sum}")
-    
+
     return errors
 
 

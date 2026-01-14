@@ -23,9 +23,15 @@ NC='\033[0m' # No Color
 # Default values
 API_URL="http://127.0.0.1:5000/api/analyze"
 REPOSITORY="tarentomaheshvakkund/testdata-java-hackathon"  # Default repository from .env
+<<<<<<< HEAD:tools/reindexing/analyze_prs_batch.sh
+START_PR=554
+END_PR=558
+DELAY_SECONDS=10  # Delay between requests to avoid overwhelming the system
+=======
 START_PR=509
 END_PR=512
 DELAY_SECONDS=2  # Delay between requests to avoid overwhelming the system
+>>>>>>> origin/release-1.0.3:tools/analyze_prs_batch.sh
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
